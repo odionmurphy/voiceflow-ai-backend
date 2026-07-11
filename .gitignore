@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+
+# Stray Expo/React Native artifacts that don't belong in this Express API (looks like
+# `expo prebuild` was run here by mistake at some point) - not part of the backend.
+android/
+app.json
