@@ -105,22 +105,35 @@ All routes except `/health`, `/api/auth/register`, `/api/auth/login` require:
   directly), route it through a serverless proxy — never `mode: 'no-cors'`.
 
 ### Deploying to Render
-`render.yaml` in this directory is a Blueprint: a free-tier web service plus a free-tier
-managed Postgres, wired together automatically.
+`render.yaml` in this directory is a Blueprint for a free-tier web service. The database
+is **not** part of the blueprint — Render discontinued free managed Postgres for new
+databases, so this uses a free external Postgres (Neon or Supabase) instead.
 
+**Step 1 — create the database (Neon, free):**
+1. Go to [neon.tech](https://neon.tech), sign up, create a project (any name/region).
+2. Copy the **connection string** it gives you (starts `postgresql://...`, includes
+   `?sslmode=require`) — you'll paste this into Render in step 3.
+   (Supabase works the same way if you'd rather use that — Database settings → Connection string.)
+
+**Step 2 — create the Blueprint on Render:**
 1. Push this repo to GitHub (already done) and go to the Render dashboard → **New** →
    **Blueprint** → select the `voiceflow-ai-backend` repo. Render reads `render.yaml`
-   and shows the service + database it's about to create.
-2. It'll prompt for the `sync: false` env vars (Twilio, Resend, Stripe, Google Calendar
-   OAuth) — fill in what you have; anything left blank just disables that feature
-   (e.g. no `STRIPE_SECRET_KEY` means billing routes no-op, not crash). `JWT_SECRET` is
-   auto-generated and `DATABASE_URL` is wired from the created database automatically.
-3. **First-deploy migration**: Render's free plan doesn't run pre-deploy commands, so
-   after the first successful deploy, open the service's **Shell** tab and run
-   `npm run migrate` (and `npm run migrate:business-members`) once against the live DB.
-4. Update `CLIENT_ORIGIN` if the web dashboard's URL changes, and once the backend has
-   a stable `*.onrender.com` URL, update `NEXT_PUBLIC_API_URL` in the `voiceflow-ai-web`
-   Vercel project to point at `<that-url>/api`.
+   and shows the one web service it's about to create.
+2. It'll prompt for every `sync: false` env var, including `DATABASE_URL` — paste the
+   Neon connection string from step 1 there. The rest (Twilio, Resend, Stripe, Google
+   Calendar OAuth) are optional; leaving one blank just disables that feature instead of
+   crashing (e.g. no `STRIPE_SECRET_KEY` means billing routes no-op, not error).
+   `JWT_SECRET` is auto-generated.
+
+**Step 3 — first-deploy migration:**
+Render's free plan doesn't run pre-deploy commands, so after the first successful
+deploy, open the service's **Shell** tab and run `npm run migrate` (and
+`npm run migrate:business-members`) once against the live DB.
+
+**Step 4 — connect the frontend:**
+Update `CLIENT_ORIGIN` if the web dashboard's URL changes, and once the backend has
+a stable `*.onrender.com` URL, update `NEXT_PUBLIC_API_URL` in the `voiceflow-ai-web`
+Vercel project to point at `<that-url>/api`.
 
 ## Roadmap status
 - **Phase 2** (done, `../voice-service`): Twilio Voice + Gemini handle the call, then POST

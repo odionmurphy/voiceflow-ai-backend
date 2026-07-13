@@ -1,9 +1,3 @@
-databases:
-  - name: voiceflow-ai-db
-    databaseName: voiceflow_ai
-    user: voiceflow_ai
-    plan: free
-
 services:
   - type: web
     name: voiceflow-ai-backend
@@ -17,9 +11,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        fromDatabase:
-          name: voiceflow-ai-db
-          property: connectionString
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_EXPIRES_IN
@@ -53,4 +45,4 @@ services:
       - key: STRIPE_PRICE_BUSINESS
         sync: false
       - key: STRIPE_TRIAL_DAYS
-        value: 14
+        value: "14"
