@@ -104,6 +104,24 @@ All routes except `/health`, `/api/auth/register`, `/api/auth/login` require:
   browser-side caller that isn't this backend (e.g. a marketing page hitting the API
   directly), route it through a serverless proxy — never `mode: 'no-cors'`.
 
+### Deploying to Render
+`render.yaml` in this directory is a Blueprint: a free-tier web service plus a free-tier
+managed Postgres, wired together automatically.
+
+1. Push this repo to GitHub (already done) and go to the Render dashboard → **New** →
+   **Blueprint** → select the `voiceflow-ai-backend` repo. Render reads `render.yaml`
+   and shows the service + database it's about to create.
+2. It'll prompt for the `sync: false` env vars (Twilio, Resend, Stripe, Google Calendar
+   OAuth) — fill in what you have; anything left blank just disables that feature
+   (e.g. no `STRIPE_SECRET_KEY` means billing routes no-op, not crash). `JWT_SECRET` is
+   auto-generated and `DATABASE_URL` is wired from the created database automatically.
+3. **First-deploy migration**: Render's free plan doesn't run pre-deploy commands, so
+   after the first successful deploy, open the service's **Shell** tab and run
+   `npm run migrate` (and `npm run migrate:business-members`) once against the live DB.
+4. Update `CLIENT_ORIGIN` if the web dashboard's URL changes, and once the backend has
+   a stable `*.onrender.com` URL, update `NEXT_PUBLIC_API_URL` in the `voiceflow-ai-web`
+   Vercel project to point at `<that-url>/api`.
+
 ## Roadmap status
 - **Phase 2** (done, `../voice-service`): Twilio Voice + Gemini handle the call, then POST
   the result to `/api/calls`. Google Calendar OAuth connect/sync lives in this backend
