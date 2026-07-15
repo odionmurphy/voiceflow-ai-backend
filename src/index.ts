@@ -1,8 +1,18 @@
+import dns from 'dns';
 import express from 'express';
 import 'express-async-errors';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
+
+// Render's outbound networking has IPv6 present but apparently broken/unreachable for
+// at least some external hosts (observed: every Stripe API call from this service
+// fails with a connection-level error - "request was retried 2 times" - despite
+// identical credentials working fine from outside Render). Node's default DNS result
+// order can return an IPv6 address first and hang/fail on it; forcing IPv4 first
+// avoids that path entirely. Set as early as possible, before any outbound client
+// (Stripe, Twilio, etc.) is constructed.
+dns.setDefaultResultOrder('ipv4first');
 
 import analyticsRoutes from './routes/analytics';
 import authRoutes from './routes/auth';
