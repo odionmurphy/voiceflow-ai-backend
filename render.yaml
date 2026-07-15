@@ -46,3 +46,7 @@ services:
         sync: false
       - key: STRIPE_TRIAL_DAYS
         value: "14"
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false

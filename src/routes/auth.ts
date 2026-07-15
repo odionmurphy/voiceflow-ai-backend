@@ -1,35 +1,18 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import { query } from '../config/db';
 import { signToken, requireAuth } from '../middleware/auth';
+import { createRateLimiter } from '../middleware/rateLimit';
 
 const router = Router();
 
 // Per-IP, not per-account, so an attacker can't dodge the limit by cycling emails
-// against one password (credential stuffing) or vice versa. Successful logins don't
-// count against the limit - only repeated failures/attempts do, so a legitimate user
-// signing in from several devices in a row never gets blocked.
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipSuccessfulRequests: true,
-  message: { error: 'Too many login attempts. Please try again in a few minutes.' },
-});
+// against one password (credential stuffing) or vice versa.
+const loginLimiter = createRateLimiter('login', 10, '15 m');
 
-// Looser than login (registration has no "successful attempts don't count" escape
-// hatch, since every request here is by definition a new account), just enough to
-// stop automated mass account creation from one IP.
-const registerLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  limit: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many accounts created from this network. Please try again later.' },
-});
+// Looser than login, just enough to stop automated mass account creation from one IP.
+const registerLimiter = createRateLimiter('register', 5, '1 h');
 
 const registerSchema = z.object({
   email: z.string().email(),
