@@ -29,7 +29,7 @@ const PORT = process.env.PORT || 4000;
 // anyone bypass IP-based rate limiting by sending a fake X-Forwarded-For header of
 // their own. Trusting a fixed hop count from the right ignores anything a client
 // prepends and always resolves to the real connecting IP.
-app.set('trust proxy', 2);
+app.set('trust proxy', 3);
 
 app.use(helmet());
 app.use(
