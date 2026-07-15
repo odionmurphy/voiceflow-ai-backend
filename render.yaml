@@ -23,7 +23,7 @@ services:
       - key: GOOGLE_CALENDAR_CLIENT_SECRET
         sync: false
       - key: GOOGLE_CALENDAR_REDIRECT_URI
-        value: https://voiceflow-ai-backend.onrender.com/api/calendar/google/callback
+        value: https://voiceflow-ai-backend-6drh.onrender.com/api/calendar/google/callback
       - key: TWILIO_ACCOUNT_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN
