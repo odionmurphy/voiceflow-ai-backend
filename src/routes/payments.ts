@@ -93,9 +93,11 @@ router.post('/:businessId/checkout-session', async (req, res) => {
     }
 
     res.json({ url });
-  } catch (err) {
+  } catch (err: any) {
     console.error('[stripe] checkout-session failed', err);
-    res.status(502).json({ error: 'Stripe request failed - please try again later' });
+    // TEMPORARY: surfacing err.message to diagnose a live-only failure. Revert to the
+    // generic message once resolved.
+    res.status(502).json({ error: 'Stripe request failed - please try again later', debug: err.message });
   }
 });
 
