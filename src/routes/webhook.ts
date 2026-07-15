@@ -85,16 +85,24 @@ router.post('/', async (req, res) => {
         const plan = planForPriceId(priceId);
         const periodEnd = new Date((item?.current_period_end ?? 0) * 1000);
 
-        const fields = ['status = $1', 'current_period_end = $2'];
-        const params: any[] = [mapStripeStatus(sub.status), periodEnd];
+        const fields = ['status = $1', 'current_period_end = $2', 'stripe_subscription_id = $3'];
+        const params: any[] = [mapStripeStatus(sub.status), periodEnd, sub.id];
         if (plan) {
           fields.push(`plan = $${params.length + 1}`, `calls_included = $${params.length + 2}`);
           params.push(plan, PLAN_LIMITS[plan]);
         }
-        params.push(sub.id);
+        params.push(sub.id, sub.customer as string);
 
+        // Stripe doesn't guarantee webhook delivery order - this event can arrive
+        // before checkout.session.completed has set stripe_subscription_id on the
+        // row, in which case matching on it alone finds nothing and silently drops
+        // the update (e.g. current_period_end never gets set). Falling back to
+        // stripe_customer_id (set earlier, at checkout-session creation time) lets
+        // this event claim the row and self-heal stripe_subscription_id regardless
+        // of arrival order.
         await query(
-          `UPDATE subscriptions SET ${fields.join(', ')} WHERE stripe_subscription_id = $${params.length}`,
+          `UPDATE subscriptions SET ${fields.join(', ')}
+           WHERE stripe_subscription_id = $${params.length - 1} OR stripe_customer_id = $${params.length}`,
           params
         );
         break;
