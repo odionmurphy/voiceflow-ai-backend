@@ -47,6 +47,12 @@ app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'voiceflow-ai-backend' }));
 
+// TEMPORARY - re-diagnosing why rate-limit counts don't converge even with a shared
+// Redis store. Remove once resolved.
+app.get('/debug/ip', (req, res) =>
+  res.json({ ip: req.ip, ips: req.ips, xff: req.headers['x-forwarded-for'], trust: app.get('trust proxy') })
+);
+
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/business', businessRoutes);
