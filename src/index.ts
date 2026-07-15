@@ -21,14 +21,18 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// Render fronts every app with exactly 2 hops of its own infra: Cloudflare, then an
-// internal proxy (confirmed via X-Forwarded-For inspection - see git history for the
-// /debug/ip route used to verify this). Trusting exactly 2 hops from the right is
-// required, not optional: Cloudflare *appends* to whatever X-Forwarded-For a client
-// sends rather than replacing it, so `trust proxy: true` (leftmost-wins) would let
-// anyone bypass IP-based rate limiting by sending a fake X-Forwarded-For header of
-// their own. Trusting a fixed hop count from the right ignores anything a client
-// prepends and always resolves to the real connecting IP.
+// Render fronts every app with Cloudflare + an internal proxy, and the value that
+// actually resolves req.ip to the stable real client IP (verified by sampling 15+
+// live requests against a temporary /debug/ip route) is 3, not the 2 literal network
+// hops visible in X-Forwarded-For - Express/proxy-addr's hop-counting includes the
+// direct socket peer as an implicit extra layer. Don't "simplify" this back down to 2
+// without re-verifying; it silently resolves to Cloudflare's edge IP instead, which
+// changes per request and makes IP-based rate limiting never converge. Also matters
+// for security, not just correctness: Cloudflare *appends* to whatever
+// X-Forwarded-For a client sends rather than replacing it, so `trust proxy: true`
+// (leftmost-wins, unbounded) would let anyone bypass IP-based rate limiting by
+// sending a fake X-Forwarded-For header of their own - a fixed hop count ignores
+// anything a client prepends.
 app.set('trust proxy', 3);
 
 app.use(helmet());
@@ -46,12 +50,6 @@ app.use('/api/payments/webhook', express.raw({ type: 'application/json' }), stri
 app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'voiceflow-ai-backend' }));
-
-// TEMPORARY - re-diagnosing why rate-limit counts don't converge even with a shared
-// Redis store. Remove once resolved.
-app.get('/debug/ip', (req, res) =>
-  res.json({ ip: req.ip, ips: req.ips, xff: req.headers['x-forwarded-for'], trust: app.get('trust proxy') })
-);
 
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/auth', authRoutes);
