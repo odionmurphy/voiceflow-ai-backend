@@ -21,13 +21,15 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// Render fronts every app with its own infra (Cloudflare, then an internal proxy) -
-// the exact hop count isn't documented/stable, and a numeric value that's too low
-// makes req.ip (and therefore express-rate-limit's default per-IP bucketing) resolve
-// inconsistently request-to-request instead of settling on the real client IP. `true`
-// trusts the whole X-Forwarded-For chain and takes the leftmost entry, which is the
-// standard recommendation for PaaS hosts where you don't control the proxy topology.
-app.set('trust proxy', true);
+// Render fronts every app with exactly 2 hops of its own infra: Cloudflare, then an
+// internal proxy (confirmed via X-Forwarded-For inspection - see git history for the
+// /debug/ip route used to verify this). Trusting exactly 2 hops from the right is
+// required, not optional: Cloudflare *appends* to whatever X-Forwarded-For a client
+// sends rather than replacing it, so `trust proxy: true` (leftmost-wins) would let
+// anyone bypass IP-based rate limiting by sending a fake X-Forwarded-For header of
+// their own. Trusting a fixed hop count from the right ignores anything a client
+// prepends and always resolves to the real connecting IP.
+app.set('trust proxy', 2);
 
 app.use(helmet());
 app.use(
@@ -44,13 +46,6 @@ app.use('/api/payments/webhook', express.raw({ type: 'application/json' }), stri
 app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'voiceflow-ai-backend' }));
-
-// TEMPORARY - diagnosing the correct `trust proxy` hop count for Render's infra.
-// Remove once express-rate-limit is confirmed to bucket a single real client
-// consistently.
-app.get('/debug/ip', (req, res) =>
-  res.json({ ip: req.ip, ips: req.ips, xff: req.headers['x-forwarded-for'] })
-);
 
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/auth', authRoutes);
