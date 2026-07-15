@@ -25,15 +25,7 @@ export function isStripeConfigured() {
 // real client once a key exists.
 let _stripe: Stripe | null = null;
 function client(): Stripe {
-  if (!_stripe) {
-    // Explicitly force the classic Node `https`-based HTTP client. Every request from
-    // Render's runtime to api.stripe.com fails with a connection-level error
-    // ("request was retried 2 times") despite identical credentials working fine
-    // everywhere else - neither pinning the Node version nor forcing IPv4-first DNS
-    // resolved it, which points at whatever HTTP client the SDK auto-selects (likely
-    // an undici/fetch-based one on newer Node) rather than the network path itself.
-    _stripe = new Stripe(SECRET_KEY, { httpClient: Stripe.createNodeHttpClient() });
-  }
+  if (!_stripe) _stripe = new Stripe(SECRET_KEY);
   return _stripe;
 }
 
