@@ -95,9 +95,16 @@ router.post('/:businessId/checkout-session', async (req, res) => {
     res.json({ url });
   } catch (err: any) {
     console.error('[stripe] checkout-session failed', err);
-    // TEMPORARY: surfacing err.message to diagnose a live-only failure. Revert to the
-    // generic message once resolved.
-    res.status(502).json({ error: 'Stripe request failed - please try again later', debug: err.message });
+    // TEMPORARY: surfacing the raw underlying network error (err.detail, per Stripe
+    // SDK's StripeConnectionError) to diagnose a live-only connection failure. Revert
+    // to the generic message once resolved.
+    res.status(502).json({
+      error: 'Stripe request failed - please try again later',
+      debug: err.message,
+      detail: err.detail
+        ? { code: err.detail.code, message: err.detail.message, errno: err.detail.errno, syscall: err.detail.syscall }
+        : null,
+    });
   }
 });
 
