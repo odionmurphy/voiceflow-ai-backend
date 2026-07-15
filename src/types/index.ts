@@ -43,6 +43,7 @@ export interface Appointment {
   business_id: string;
   customer_id: string;
   service_name: string | null;
+  price: number | null;
   start_time: string;
   end_time: string;
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show';

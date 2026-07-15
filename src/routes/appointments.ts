@@ -164,11 +164,25 @@ router.post('/', async (req, res) => {
     return res.status(409).json({ error: 'This time slot overlaps an existing appointment' });
   }
 
+  // Snapshot the service's price at booking time (see schema.sql comment on
+  // appointments.price for why this isn't a live join at read time).
+  let price: number | null = null;
+  if (serviceName) {
+    const priceResult = await query(
+      `SELECT (elem->>'price')::numeric AS price
+       FROM ai_settings, jsonb_array_elements(services) AS elem
+       WHERE business_id = $1 AND elem->>'name' = $2
+       LIMIT 1`,
+      [businessId, serviceName]
+    );
+    price = priceResult.rows[0]?.price ?? null;
+  }
+
   const result = await query(
-    `INSERT INTO appointments (business_id, customer_id, staff_user_id, service_name, start_time, end_time, source, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, 'confirmed')
+    `INSERT INTO appointments (business_id, customer_id, staff_user_id, service_name, price, start_time, end_time, source, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'confirmed')
      RETURNING *`,
-    [businessId, customerId, staffId || null, serviceName || null, startTime, endTime, source]
+    [businessId, customerId, staffId || null, serviceName || null, price, startTime, endTime, source]
   );
   const appointment = result.rows[0];
 
@@ -237,15 +251,38 @@ router.patch('/:id', async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const f = parsed.data;
 
+  // If the service is being changed, re-snapshot its price too - otherwise the
+  // appointment would keep the old service's price attached to a new service name.
+  let price: number | undefined;
+  if (f.serviceName) {
+    const priceResult = await query(
+      `SELECT (elem->>'price')::numeric AS price
+       FROM ai_settings, jsonb_array_elements(services) AS elem
+       WHERE business_id = $1 AND elem->>'name' = $2
+       LIMIT 1`,
+      [appt.business_id, f.serviceName]
+    );
+    price = priceResult.rows[0]?.price ?? null;
+  }
+
   const result = await query(
     `UPDATE appointments SET
        start_time = COALESCE($1, start_time),
        end_time = COALESCE($2, end_time),
        status = COALESCE($3, status),
-       service_name = COALESCE($4, service_name)
+       service_name = COALESCE($4, service_name),
+       price = CASE WHEN $6 THEN $7 ELSE price END
      WHERE id = $5
      RETURNING *`,
-    [f.startTime ?? null, f.endTime ?? null, f.status ?? null, f.serviceName ?? null, req.params.id]
+    [
+      f.startTime ?? null,
+      f.endTime ?? null,
+      f.status ?? null,
+      f.serviceName ?? null,
+      req.params.id,
+      f.serviceName !== undefined,
+      price ?? null,
+    ]
   );
   const updated = result.rows[0];
 

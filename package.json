@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "migrate": "ts-node src/db/migrate.ts",
-    "migrate:business-members": "ts-node src/db/migrate-business-members.ts"
+    "migrate:business-members": "ts-node src/db/migrate-business-members.ts",
+    "migrate:appointment-price": "ts-node src/db/migrate-appointment-price.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

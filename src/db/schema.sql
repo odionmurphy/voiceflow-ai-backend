@@ -112,6 +112,10 @@ CREATE TABLE appointments (
     -- is the (business_id, user_id) pair, not a standalone id.
     staff_user_id   UUID REFERENCES users(id) ON DELETE SET NULL,
     service_name    VARCHAR(255),
+    -- Snapshot of ai_settings.services[].price for service_name at booking time (NULL if
+    -- no matching service or no price set) - deliberately not a live lookup, so a later
+    -- price change doesn't retroactively rewrite historical revenue.
+    price           NUMERIC(10,2),
     start_time      TIMESTAMPTZ NOT NULL,
     end_time        TIMESTAMPTZ NOT NULL,
     status          VARCHAR(50) NOT NULL DEFAULT 'pending', -- pending | confirmed | cancelled | completed | no_show

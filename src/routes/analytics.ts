@@ -64,7 +64,8 @@ router.get('/:businessId', async (req, res) => {
        COUNT(*)::int AS appointments_total,
        COUNT(*) FILTER (WHERE status = 'completed')::int AS appointments_completed,
        COUNT(*) FILTER (WHERE status = 'cancelled')::int AS appointments_cancelled,
-       COUNT(*) FILTER (WHERE status = 'no_show')::int AS appointments_no_show
+       COUNT(*) FILTER (WHERE status = 'no_show')::int AS appointments_no_show,
+       COALESCE(SUM(price) FILTER (WHERE status IN ('confirmed', 'completed')), 0)::numeric AS revenue
      FROM appointments
      WHERE business_id = $1 AND start_time >= $2::date AND start_time < $3::date + interval '1 day'`,
     [req.params.businessId, fromDate, toDate]
