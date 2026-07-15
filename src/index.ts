@@ -21,10 +21,13 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// Render (and most PaaS hosts) put the app behind a reverse proxy - without this,
-// express-rate-limit and req.ip both see the proxy's IP for every request, which
-// either rate-limits everyone as one client or nobody at all.
-app.set('trust proxy', 1);
+// Render fronts every app with its own infra (Cloudflare, then an internal proxy) -
+// the exact hop count isn't documented/stable, and a numeric value that's too low
+// makes req.ip (and therefore express-rate-limit's default per-IP bucketing) resolve
+// inconsistently request-to-request instead of settling on the real client IP. `true`
+// trusts the whole X-Forwarded-For chain and takes the leftmost entry, which is the
+// standard recommendation for PaaS hosts where you don't control the proxy topology.
+app.set('trust proxy', true);
 
 app.use(helmet());
 app.use(
@@ -41,6 +44,13 @@ app.use('/api/payments/webhook', express.raw({ type: 'application/json' }), stri
 app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'voiceflow-ai-backend' }));
+
+// TEMPORARY - diagnosing the correct `trust proxy` hop count for Render's infra.
+// Remove once express-rate-limit is confirmed to bucket a single real client
+// consistently.
+app.get('/debug/ip', (req, res) =>
+  res.json({ ip: req.ip, ips: req.ips, xff: req.headers['x-forwarded-for'] })
+);
 
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/auth', authRoutes);
