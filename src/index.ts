@@ -21,6 +21,11 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// Render (and most PaaS hosts) put the app behind a reverse proxy - without this,
+// express-rate-limit and req.ip both see the proxy's IP for every request, which
+// either rate-limits everyone as one client or nobody at all.
+app.set('trust proxy', 1);
+
 app.use(helmet());
 app.use(
   cors({
