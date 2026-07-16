@@ -50,3 +50,5 @@ services:
         sync: false
       - key: UPSTASH_REDIS_REST_TOKEN
         sync: false
+      - key: SENTRY_DSN
+        sync: false

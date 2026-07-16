@@ -12,6 +12,7 @@
     "migrate:appointment-price": "ts-node src/db/migrate-appointment-price.ts"
   },
   "dependencies": {
+    "@sentry/node": "^10.65.0",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.0",
     "bcryptjs": "^2.4.3",

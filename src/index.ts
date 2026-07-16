@@ -1,8 +1,10 @@
+import './instrument';
+
 import express from 'express';
 import 'express-async-errors';
 import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
+import * as Sentry from '@sentry/node';
 
 import analyticsRoutes from './routes/analytics';
 import authRoutes from './routes/auth';
@@ -15,8 +17,6 @@ import messageRoutes from './routes/messages';
 import paymentRoutes from './routes/payments';
 import stripeWebhookRoutes from './routes/webhook';
 import { startReminderScheduler } from './jobs/reminders';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -65,6 +65,10 @@ app.use('/api/payments', paymentRoutes);
 app.use((req, res) => {
   res.status(404).json({ error: `Route not found: ${req.method} ${req.originalUrl}` });
 });
+
+// Must be registered after all routes but before the central error handler below, so
+// Sentry sees the error first and can report it, then hands off to our own handler.
+Sentry.setupExpressErrorHandler(app);
 
 // Central error handler
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
