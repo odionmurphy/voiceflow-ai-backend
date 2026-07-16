@@ -51,12 +51,6 @@ app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'voiceflow-ai-backend' }));
 
-// TEMPORARY - verifying Sentry actually receives events end-to-end. Remove once
-// confirmed.
-app.get('/debug/sentry-test', () => {
-  throw new Error('Sentry verification test error - backend');
-});
-
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/business', businessRoutes);
