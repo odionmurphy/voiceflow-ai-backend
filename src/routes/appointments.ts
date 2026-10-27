@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { DateTime } from 'luxon';
 import { query } from '../config/db';
 import { requireAuth } from '../middleware/auth';
 import { getBusinessAccess } from '../middleware/ownership';
@@ -53,6 +54,8 @@ router.get('/', async (req, res) => {
 // (falling back to the business's if they haven't set custom ones) and only that staff
 // member's own appointments - so two staff can be double-booked against each other but
 // never against themselves.
+// All day boundaries are computed in the business's own timezone (businesses.timezone),
+// not the server's, so a Render (UTC) server still gives correct Berlin slots.
 router.get('/availability', async (req, res) => {
   const businessId = req.query.businessId as string;
   const date = req.query.date as string; // YYYY-MM-DD
@@ -67,7 +70,10 @@ router.get('/availability', async (req, res) => {
   if (!access) return res.status(404).json({ error: 'Business not found' });
   const business = access.business;
 
-  const dayOfWeek = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' }).toLowerCase().slice(0, 3);
+  const tz = business.timezone || 'Europe/Berlin';
+  const day = DateTime.fromISO(date, { zone: tz });
+  if (!day.isValid) return res.status(400).json({ error: 'Invalid date' });
+  const dayOfWeek = day.setLocale('en').toFormat('ccc').toLowerCase(); // mon, tue, ...
 
   let hours = business.business_hours?.[dayOfWeek];
   if (staffId) {
@@ -92,21 +98,23 @@ router.get('/availability', async (req, res) => {
   }
 
   const [openTime, closeTime] = hours;
-  const dayStart = new Date(`${date}T${openTime}:00`);
-  const dayEnd = new Date(`${date}T${closeTime}:00`);
+  const dayStart = DateTime.fromISO(`${date}T${openTime}`, { zone: tz }).toJSDate();
+  const dayEnd = DateTime.fromISO(`${date}T${closeTime}`, { zone: tz }).toJSDate();
 
   const existing = staffId
     ? await query(
         `SELECT start_time, end_time FROM appointments
-         WHERE business_id = $1 AND staff_user_id = $2 AND start_time::date = $3 AND status != 'cancelled'
+         WHERE business_id = $1 AND staff_user_id = $2 AND status != 'cancelled'
+           AND start_time < $4 AND end_time > $3
          ORDER BY start_time`,
-        [businessId, staffId, date]
+        [businessId, staffId, dayStart, dayEnd]
       )
     : await query(
         `SELECT start_time, end_time FROM appointments
-         WHERE business_id = $1 AND staff_user_id IS NULL AND start_time::date = $2 AND status != 'cancelled'
+         WHERE business_id = $1 AND staff_user_id IS NULL AND status != 'cancelled'
+           AND start_time < $3 AND end_time > $2
          ORDER BY start_time`,
-        [businessId, date]
+        [businessId, dayStart, dayEnd]
       );
   const booked = existing.rows.map((r) => ({
     start: new Date(r.start_time),
@@ -145,8 +153,19 @@ router.post('/', async (req, res) => {
     }
   }
 
+  // The customer must belong to the same business as the appointment.
+  const cust = await query(
+    'SELECT 1 FROM customers WHERE id = $1 AND business_id = $2',
+    [customerId, businessId]
+  );
+  if (!cust.rows[0]) {
+    return res.status(400).json({ error: 'customerId does not belong to this business' });
+  }
+
   // Mirrors GET /availability's isolation: an unassigned booking only conflicts with
   // other unassigned bookings, a staff-assigned one only with that same staff member's.
+  // This pre-check gives a fast, friendly 409 in the normal case; the database's
+  // appointments_no_overlap constraint is what actually guarantees it under races.
   const conflict = staffId
     ? await query(
         `SELECT id FROM appointments
@@ -178,12 +197,23 @@ router.post('/', async (req, res) => {
     price = priceResult.rows[0]?.price ?? null;
   }
 
-  const result = await query(
-    `INSERT INTO appointments (business_id, customer_id, staff_user_id, service_name, price, start_time, end_time, source, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'confirmed')
-     RETURNING *`,
-    [businessId, customerId, staffId || null, serviceName || null, price, startTime, endTime, source]
-  );
+  let result: Awaited<ReturnType<typeof query>>;
+  try {
+    result = await query(
+      `INSERT INTO appointments (business_id, customer_id, staff_user_id, service_name, price, start_time, end_time, source, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'confirmed')
+       RETURNING *`,
+      [businessId, customerId, staffId || null, serviceName || null, price, startTime, endTime, source]
+    );
+  } catch (err: any) {
+    if (err.code === '23P01') {
+      return res.status(409).json({ error: 'This time slot overlaps an existing appointment' });
+    }
+    if (err.code === '23514') {
+      return res.status(400).json({ error: 'endTime must be after startTime' });
+    }
+    throw err;
+  }
   const appointment = result.rows[0];
 
   await query('UPDATE customers SET last_visit_at = $1 WHERE id = $2', [startTime, customerId]);
@@ -265,25 +295,38 @@ router.patch('/:id', async (req, res) => {
     price = priceResult.rows[0]?.price ?? null;
   }
 
-  const result = await query(
-    `UPDATE appointments SET
-       start_time = COALESCE($1, start_time),
-       end_time = COALESCE($2, end_time),
-       status = COALESCE($3, status),
-       service_name = COALESCE($4, service_name),
-       price = CASE WHEN $6 THEN $7 ELSE price END
-     WHERE id = $5
-     RETURNING *`,
-    [
-      f.startTime ?? null,
-      f.endTime ?? null,
-      f.status ?? null,
-      f.serviceName ?? null,
-      req.params.id,
-      f.serviceName !== undefined,
-      price ?? null,
-    ]
-  );
+  // Time/status edits are checked by the database's appointments_no_overlap constraint,
+  // which also catches un-cancelling an appointment into an occupied slot.
+  let result: Awaited<ReturnType<typeof query>>;
+  try {
+    result = await query(
+      `UPDATE appointments SET
+         start_time = COALESCE($1, start_time),
+         end_time = COALESCE($2, end_time),
+         status = COALESCE($3, status),
+         service_name = COALESCE($4, service_name),
+         price = CASE WHEN $6 THEN $7 ELSE price END
+       WHERE id = $5
+       RETURNING *`,
+      [
+        f.startTime ?? null,
+        f.endTime ?? null,
+        f.status ?? null,
+        f.serviceName ?? null,
+        req.params.id,
+        f.serviceName !== undefined,
+        price ?? null,
+      ]
+    );
+  } catch (err: any) {
+    if (err.code === '23P01') {
+      return res.status(409).json({ error: 'This time slot overlaps an existing appointment' });
+    }
+    if (err.code === '23514') {
+      return res.status(400).json({ error: 'endTime must be after startTime' });
+    }
+    throw err;
+  }
   const updated = result.rows[0];
 
   if (appt.calendar_event_id && (f.startTime || f.endTime)) {
