@@ -47,6 +47,25 @@ router.post('/', async (req, res) => {
   const access = await getBusinessAccess(f.businessId, req.user!.userId);
   if (!access) return res.status(404).json({ error: 'Business not found' });
 
+  if (f.customerId) {
+    const customer = await query(
+      'SELECT 1 FROM customers WHERE id = $1 AND business_id = $2',
+      [f.customerId, f.businessId]
+    );
+    if (!customer.rows[0]) {
+      return res.status(400).json({ error: 'customerId does not belong to this business' });
+    }
+  }
+  if (f.resultedInAppointmentId) {
+    const appointment = await query(
+      'SELECT 1 FROM appointments WHERE id = $1 AND business_id = $2',
+      [f.resultedInAppointmentId, f.businessId]
+    );
+    if (!appointment.rows[0]) {
+      return res.status(400).json({ error: 'resultedInAppointmentId does not belong to this business' });
+    }
+  }
+
   const result = await query(
     `INSERT INTO calls (business_id, customer_id, caller_number, status, duration_seconds, intent, transcript, summary, recording_url, resulted_in_appointment_id)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)

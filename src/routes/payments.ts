@@ -3,10 +3,12 @@ import { query } from '../config/db';
 import { requireAuth } from '../middleware/auth';
 import { getBusinessAccess } from '../middleware/ownership';
 import {
+  PLAN_PRICE_IDS,
   PLAN_LIMITS,
   getOrCreateCustomer,
   createCheckoutSession,
   createBillingPortalSession,
+  retrieveSubscription,
   changeSubscriptionPlan,
   isStripeConfigured,
 } from '../services/stripe';
@@ -21,6 +23,27 @@ const router = Router();
 router.use(requireAuth);
 
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:3000';
+
+function getStripeErrorDetails(err: unknown) {
+  if (typeof err !== 'object' || err === null) return {};
+
+  const error = err as {
+    statusCode?: unknown;
+    type?: unknown;
+    code?: unknown;
+    param?: unknown;
+    requestId?: unknown;
+    message?: unknown;
+  };
+  return {
+    statusCode: error.statusCode,
+    type: error.type,
+    code: error.code,
+    param: error.param,
+    requestId: error.requestId,
+    message: error.message,
+  };
+}
 
 // GET /api/payments/:businessId/subscription - owner-only (staff has no billing access)
 router.get('/:businessId/subscription', async (req, res) => {
@@ -49,7 +72,7 @@ router.post('/:businessId/checkout-session', async (req, res) => {
   }
 
   const plan = req.body.plan as string;
-  if (!plan || !(plan in PLAN_LIMITS)) {
+  if (!plan || !Object.prototype.hasOwnProperty.call(PLAN_LIMITS, plan)) {
     return res.status(400).json({ error: 'plan must be one of starter, professional, business' });
   }
 
@@ -85,6 +108,7 @@ router.post('/:businessId/checkout-session', async (req, res) => {
       customerId,
       businessId: req.params.businessId,
       plan,
+      trialPeriodDays: subscription?.stripe_subscription_id ? 0 : undefined,
       successUrl: `${CLIENT_ORIGIN}/dashboard/settings?billing=success`,
       cancelUrl: `${CLIENT_ORIGIN}/dashboard/settings?billing=cancelled`,
     });
@@ -112,8 +136,11 @@ router.post('/:businessId/change-plan', async (req, res) => {
   }
 
   const plan = req.body.plan as string;
-  if (!plan || !(plan in PLAN_LIMITS)) {
+  if (!plan || !Object.prototype.hasOwnProperty.call(PLAN_LIMITS, plan)) {
     return res.status(400).json({ error: 'plan must be one of starter, professional, business' });
+  }
+  if (!PLAN_PRICE_IDS[plan]) {
+    return res.status(500).json({ error: `No Stripe price configured for plan "${plan}"` });
   }
 
   const subResult = await query('SELECT * FROM subscriptions WHERE business_id = $1', [
@@ -125,21 +152,54 @@ router.post('/:businessId/change-plan', async (req, res) => {
   }
 
   try {
-    const updated = await changeSubscriptionPlan(subscription.stripe_subscription_id, plan);
+    const current = await retrieveSubscription(subscription.stripe_subscription_id);
+    if (current.status === 'canceled') {
+      const customerId =
+        typeof current.customer === 'string' ? current.customer : current.customer.id;
+      const url = await createCheckoutSession({
+        customerId,
+        businessId: req.params.businessId,
+        plan,
+        trialPeriodDays: 0,
+        successUrl: `${CLIENT_ORIGIN}/dashboard/settings?billing=success`,
+        cancelUrl: `${CLIENT_ORIGIN}/dashboard/settings?billing=cancelled`,
+      });
+      if (!url) {
+        return res.status(500).json({ error: `No Stripe price configured for plan "${plan}"` });
+      }
+
+      await query(
+        `UPDATE subscriptions SET status = 'cancelled', stripe_customer_id = $1 WHERE business_id = $2`,
+        [customerId, req.params.businessId]
+      );
+      return res.json({ kind: 'checkout', url });
+    }
+
+    const updated = await changeSubscriptionPlan(current, plan);
 
     const result = await query(
       `UPDATE subscriptions SET plan = $1, calls_included = $2 WHERE business_id = $3 RETURNING *`,
       [plan, PLAN_LIMITS[plan], req.params.businessId]
     );
-    res.json({ subscription: result.rows[0], stripeStatus: updated.status });
-  } catch (err: any) {
-    console.error('[stripe] change-plan failed', err);
-    const status = err?.statusCode === 429 ? 429 : 502;
-    const message =
-      err?.statusCode === 429
-        ? 'Stripe rate limit reached for this subscription - please wait a bit before changing plans again'
-        : 'Stripe request failed - please try again later';
-    res.status(status).json({ error: message });
+    res.json({ kind: 'updated', subscription: result.rows[0], stripeStatus: updated.status });
+  } catch (err: unknown) {
+    const details = getStripeErrorDetails(err);
+    console.error('[stripe] change-plan failed', details);
+    const status = details.statusCode === 429 ? 429 : 502;
+    const stripeCode = typeof details.code === 'string' ? details.code : undefined;
+    let message = 'Stripe rejected the plan change - verify the plan price configuration and check the backend logs';
+    if (status === 429) {
+      message = 'Stripe rate limit reached for this subscription - please wait a bit before changing plans again';
+    } else if (stripeCode === 'resource_missing') {
+      message =
+        'Stripe could not find the subscription or plan price - verify the configured price IDs belong to the same Stripe account and mode as STRIPE_SECRET_KEY';
+    }
+    const requestId =
+      typeof details.requestId === 'string' ? details.requestId : undefined;
+    const reference = [stripeCode, requestId].filter(Boolean).join(', ');
+    res.status(status).json({
+      error: reference ? `${message} (Stripe: ${reference})` : message,
+    });
   }
 });
 

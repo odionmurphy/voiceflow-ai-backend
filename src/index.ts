@@ -17,6 +17,39 @@ import messageRoutes from './routes/messages';
 import paymentRoutes from './routes/payments';
 import stripeWebhookRoutes from './routes/webhook';
 import { startReminderScheduler } from './jobs/reminders';
+import { pool } from './config/db';
+
+if (process.env.NODE_ENV === 'production') {
+  const required = [
+    'DATABASE_URL',
+    'CLIENT_ORIGIN',
+    'STRIPE_SECRET_KEY',
+    'STRIPE_WEBHOOK_SECRET',
+    'STRIPE_PRICE_STARTER',
+    'STRIPE_PRICE_PROFESSIONAL',
+    'STRIPE_PRICE_BUSINESS',
+    'UPSTASH_REDIS_REST_URL',
+    'UPSTASH_REDIS_REST_TOKEN',
+  ];
+  const missing = required.filter((key) => !process.env[key]);
+  if (missing.length) {
+    throw new Error(`Missing required production configuration: ${missing.join(', ')}`);
+  }
+  if (!process.env.STRIPE_SECRET_KEY?.startsWith('sk_live_')) {
+    throw new Error('Production STRIPE_SECRET_KEY must use Stripe live mode');
+  }
+  if (!process.env.STRIPE_WEBHOOK_SECRET?.startsWith('whsec_')) {
+    throw new Error('Production STRIPE_WEBHOOK_SECRET must be configured');
+  }
+  for (const key of ['STRIPE_PRICE_STARTER', 'STRIPE_PRICE_PROFESSIONAL', 'STRIPE_PRICE_BUSINESS']) {
+    if (!process.env[key]?.startsWith('price_')) {
+      throw new Error(`${key} must be a Stripe Price ID in production`);
+    }
+  }
+  if (!process.env.CLIENT_ORIGIN?.startsWith('https://')) {
+    throw new Error('Production CLIENT_ORIGIN must use HTTPS');
+  }
+}
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -47,9 +80,17 @@ app.use(
 // mounted before the global express.json() parser consumes the stream.
 app.use('/api/payments/webhook', express.raw({ type: 'application/json' }), stripeWebhookRoutes);
 
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 
-app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'voiceflow-ai-backend' }));
+app.get('/health', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ status: 'ok', service: 'voiceflow-ai-backend' });
+  } catch (err) {
+    console.error('[health] database check failed:', err);
+    res.status(503).json({ status: 'unavailable', service: 'voiceflow-ai-backend' });
+  }
+});
 
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/auth', authRoutes);
@@ -74,7 +115,14 @@ Sentry.setupExpressErrorHandler(app);
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[error]', err);
-  res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+  const status = Number.isInteger(err.status) && err.status >= 400 && err.status < 500
+    ? err.status
+    : 500;
+  const message =
+    status === 413 ? 'Request body is too large' :
+    status === 400 ? 'Invalid request body' :
+    'Internal server error';
+  res.status(status).json({ error: message });
 });
 
 app.listen(PORT, () => {

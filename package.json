@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "migrate": "ts-node src/db/migrate.ts",
     "migrate:business-members": "ts-node src/db/migrate-business-members.ts",
-    "migrate:appointment-price": "ts-node src/db/migrate-appointment-price.ts"
+    "migrate:appointment-price": "ts-node src/db/migrate-appointment-price.ts",
+    "migrate:call-admission": "ts-node src/db/migrate-call-admission.ts"
   },
   "dependencies": {
     "@sentry/node": "^10.65.0",

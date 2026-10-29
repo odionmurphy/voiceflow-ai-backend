@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { query } from '../config/db';
+import { JWT_SECRET } from '../config/secrets';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 const CLIENT_ID = process.env.GOOGLE_CALENDAR_CLIENT_ID || '';
 const CLIENT_SECRET = process.env.GOOGLE_CALENDAR_CLIENT_SECRET || '';
 const REDIRECT_URI = process.env.GOOGLE_CALENDAR_REDIRECT_URI || '';

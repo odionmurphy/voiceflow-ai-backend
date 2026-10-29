@@ -65,6 +65,19 @@ npm run dev
 # -> http://localhost:4000/health should return {"status":"ok"}
 ```
 
+For Stripe plan changes, set `STRIPE_SECRET_KEY` and all three `STRIPE_PRICE_*`
+variables in `backend/.env`. Each price variable must be a recurring Stripe Price ID
+(`price_...`) from the same Stripe account and test/live mode as the secret key. If
+Stripe rejects a change, the backend logs the Stripe error code and request ID; the
+API error includes those references for diagnosis.
+
+Before deploying the inbound call quota enforcement, run
+`npm run migrate:call-admission` once against the production database, then deploy
+the backend and voice service. Configure live-mode Stripe keys/prices, Upstash Redis,
+a production `CLIENT_ORIGIN`, and a strong `JWT_SECRET` (at least 32 characters) in
+the backend environment. The production process refuses to start when those required
+settings are missing.
+
 ## API quick reference
 
 All routes except `/health`, `/api/auth/register`, `/api/auth/login` require:
@@ -92,7 +105,7 @@ All routes except `/health`, `/api/auth/register`, `/api/auth/login` require:
 | GET | `/api/analytics/:businessId?days=` | Call/appointment trends + totals for the last N days (default 30) |
 | GET | `/api/payments/:businessId/subscription` | Plan + usage |
 | POST | `/api/payments/:businessId/checkout-session` | Start a Stripe Checkout session for a plan |
-| POST | `/api/payments/:businessId/change-plan` | Swap the price on an existing live subscription |
+| POST | `/api/payments/:businessId/change-plan` | Swap an active subscription's price, or start Checkout if Stripe reports it cancelled |
 | POST | `/api/payments/:businessId/billing-portal` | Open the Stripe Billing Portal |
 
 ## Deploying (same pattern as your other client demos)

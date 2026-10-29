@@ -155,9 +155,8 @@ router.post('/', async (req, res) => {
         console.log('[stripe webhook] unhandled event type:', event.type);
     }
   } catch (err: any) {
-    // Log and still 200 - a DB hiccup shouldn't cause Stripe to hammer us with retries
-    // for an event we've already accepted the signature on.
     console.error('[stripe webhook] handler error:', err.message);
+    return res.status(500).json({ error: 'Webhook processing failed; Stripe should retry' });
   }
 
   res.json({ received: true });

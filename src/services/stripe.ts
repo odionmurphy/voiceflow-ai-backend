@@ -13,7 +13,7 @@ export const PLAN_PRICE_IDS: Record<string, string> = {
 export const PLAN_LIMITS: Record<string, number> = {
   starter: 100,
   professional: 500,
-  business: Number.MAX_SAFE_INTEGER,
+  business: 2_147_483_647,
 };
 
 export function isStripeConfigured() {
@@ -56,6 +56,7 @@ export async function createCheckoutSession(params: {
   customerId: string;
   businessId: string;
   plan: string;
+  trialPeriodDays?: number;
   successUrl: string;
   cancelUrl: string;
 }): Promise<string | null> {
@@ -66,7 +67,11 @@ export async function createCheckoutSession(params: {
     mode: 'subscription',
     customer: params.customerId,
     line_items: [{ price: priceId, quantity: 1 }],
-    subscription_data: { trial_period_days: TRIAL_DAYS },
+    ...(params.trialPeriodDays === undefined
+      ? { subscription_data: { trial_period_days: TRIAL_DAYS } }
+      : params.trialPeriodDays > 0
+        ? { subscription_data: { trial_period_days: params.trialPeriodDays } }
+        : {}),
     metadata: { businessId: params.businessId, plan: params.plan },
     success_url: params.successUrl,
     cancel_url: params.cancelUrl,
@@ -101,14 +106,20 @@ export async function retrieveSubscription(subscriptionId: string): Promise<Stri
 // Checkout Session for an upgrade/downgrade would create a second, parallel subscription
 // instead of replacing the first.
 export async function changeSubscriptionPlan(
-  subscriptionId: string,
+  current: Stripe.Subscription,
   plan: string
 ): Promise<Stripe.Subscription> {
   const priceId = PLAN_PRICE_IDS[plan];
-  const current = await client().subscriptions.retrieve(subscriptionId);
-  const itemId = current.items.data[0].id;
+  if (!priceId) {
+    throw new Error(`No Stripe price configured for plan "${plan}"`);
+  }
 
-  return client().subscriptions.update(subscriptionId, {
+  const itemId = current.items.data[0]?.id;
+  if (!itemId) {
+    throw new Error(`Stripe subscription "${current.id}" has no subscription items`);
+  }
+
+  return client().subscriptions.update(current.id, {
     items: [{ id: itemId, price: priceId }],
     proration_behavior: 'create_prorations',
   });

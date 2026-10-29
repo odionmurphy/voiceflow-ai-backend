@@ -144,6 +144,8 @@ CREATE TABLE calls (
     transcript          TEXT,
     summary             TEXT,                   -- short AI-generated summary of the call
     recording_url       TEXT,
+    twilio_call_sid     VARCHAR(64),
+    quota_reserved      BOOLEAN NOT NULL DEFAULT false,
     resulted_in_appointment_id UUID REFERENCES appointments(id) ON DELETE SET NULL,
     -- Set true when the caller wanted to book (intent='book') but the call ended without
     -- one - the automatic-follow-up job (voice-service/src/jobs/followups.ts) scans this.
@@ -153,6 +155,7 @@ CREATE TABLE calls (
 );
 
 CREATE INDEX idx_calls_business ON calls(business_id, created_at);
+CREATE UNIQUE INDEX idx_calls_twilio_call_sid ON calls(twilio_call_sid);
 
 -- Keeps subscriptions.calls_used_this_period accurate no matter which code path
 -- inserts a call row (the backend's POST /api/calls, or voice-service's direct
@@ -161,7 +164,7 @@ CREATE INDEX idx_calls_business ON calls(business_id, created_at);
 CREATE OR REPLACE FUNCTION increment_calls_used()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF NEW.status = 'completed' THEN
+    IF NEW.status = 'completed' AND NOT NEW.quota_reserved THEN
         UPDATE subscriptions
         SET calls_used_this_period = calls_used_this_period + 1
         WHERE business_id = NEW.business_id;

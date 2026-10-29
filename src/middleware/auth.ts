@@ -1,8 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AuthTokenPayload } from '../types';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+import { JWT_SECRET } from '../config/secrets';
 
 export function signToken(payload: AuthTokenPayload): string {
   return jwt.sign(payload, JWT_SECRET, {

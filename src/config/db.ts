@@ -3,6 +3,10 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+if (process.env.NODE_ENV === 'production' && !process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL must be configured in production');
+}
+
 if (!process.env.DATABASE_URL) {
   // eslint-disable-next-line no-console
   console.warn('[db] DATABASE_URL is not set - falling back to default local connection');

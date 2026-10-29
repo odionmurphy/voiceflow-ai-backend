@@ -21,6 +21,9 @@ if (!redis) {
   console.warn(
     '[rateLimit] UPSTASH_REDIS_REST_URL/TOKEN not set - rate limiting is disabled, not silently broken.'
   );
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Upstash Redis must be configured in production for authentication rate limits');
+  }
 }
 
 type Duration = `${number} ${'ms' | 's' | 'm' | 'h' | 'd'}`;
@@ -40,16 +43,21 @@ export function createRateLimiter(prefix: string, limit: number, window: Duratio
     // logged once above at startup rather than per-request.
     if (!ratelimit) return next();
 
-    const { success, limit: max, remaining, reset } = await ratelimit.limit(
-      req.ip || 'unknown'
-    );
-    res.setHeader('RateLimit-Limit', String(max));
-    res.setHeader('RateLimit-Remaining', String(remaining));
-    res.setHeader('RateLimit-Reset', String(Math.max(0, Math.ceil((reset - Date.now()) / 1000))));
+    try {
+      const { success, limit: max, remaining, reset } = await ratelimit.limit(
+        req.ip || 'unknown'
+      );
+      res.setHeader('RateLimit-Limit', String(max));
+      res.setHeader('RateLimit-Remaining', String(remaining));
+      res.setHeader('RateLimit-Reset', String(Math.max(0, Math.ceil((reset - Date.now()) / 1000))));
 
-    if (!success) {
-      return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+      if (!success) {
+        return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+      }
+      next();
+    } catch (err) {
+      console.error('[rateLimit] Upstash request failed:', err);
+      res.status(503).json({ error: 'Authentication is temporarily unavailable. Please try again.' });
     }
-    next();
   };
 }
