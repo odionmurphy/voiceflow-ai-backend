@@ -35,8 +35,13 @@ if (process.env.NODE_ENV === 'production') {
   if (missing.length) {
     throw new Error(`Missing required production configuration: ${missing.join(', ')}`);
   }
-  if (!process.env.STRIPE_SECRET_KEY?.startsWith('sk_live_')) {
-    throw new Error('Production STRIPE_SECRET_KEY must use Stripe live mode');
+  if (
+    !process.env.STRIPE_SECRET_KEY?.startsWith('sk_live_') &&
+    process.env.ALLOW_STRIPE_TEST_MODE !== 'true'
+  ) {
+    throw new Error(
+      'Production STRIPE_SECRET_KEY must use Stripe live mode (set ALLOW_STRIPE_TEST_MODE=true to run billing in test mode during a pilot)',
+    );
   }
   if (!process.env.STRIPE_WEBHOOK_SECRET?.startsWith('whsec_')) {
     throw new Error('Production STRIPE_WEBHOOK_SECRET must be configured');
