@@ -74,9 +74,11 @@ API error includes those references for diagnosis.
 Before deploying the inbound call quota enforcement, run
 `npm run migrate:call-admission` once against the production database, then deploy
 the backend and voice service. Configure live-mode Stripe keys/prices, Upstash Redis,
-a production `CLIENT_ORIGIN`, and a strong `JWT_SECRET` (at least 32 characters) in
-the backend environment. The production process refuses to start when those required
-settings are missing.
+a production `CLIENT_ORIGIN`, any additional exact browser origins in
+`CORS_ALLOWED_ORIGINS` (comma-separated, HTTPS only), and a strong `JWT_SECRET`
+(at least 32 characters) in the backend environment. `CLIENT_ORIGIN` remains the
+canonical URL used for billing and OAuth redirects. The production process refuses to
+start when required settings or invalid CORS origins are present.
 
 ## API quick reference
 

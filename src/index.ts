@@ -19,6 +19,17 @@ import stripeWebhookRoutes from './routes/webhook';
 import { startReminderScheduler } from './jobs/reminders';
 import { pool } from './config/db';
 
+const clientOrigin = process.env.CLIENT_ORIGIN || 'http://localhost:3000';
+const corsAllowedOrigins = [
+  ...new Set([
+    clientOrigin,
+    ...(process.env.CORS_ALLOWED_ORIGINS || '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+  ]),
+];
+
 if (process.env.NODE_ENV === 'production') {
   const required = [
     'DATABASE_URL',
@@ -51,8 +62,16 @@ if (process.env.NODE_ENV === 'production') {
       throw new Error(`${key} must be a Stripe Price ID in production`);
     }
   }
-  if (!process.env.CLIENT_ORIGIN?.startsWith('https://')) {
-    throw new Error('Production CLIENT_ORIGIN must use HTTPS');
+  for (const origin of corsAllowedOrigins) {
+    let parsedOrigin: URL;
+    try {
+      parsedOrigin = new URL(origin);
+    } catch {
+      throw new Error(`Invalid production CORS origin: ${origin}`);
+    }
+    if (parsedOrigin.protocol !== 'https:' || parsedOrigin.origin !== origin) {
+      throw new Error(`Production CORS origins must be HTTPS origins without paths: ${origin}`);
+    }
   }
 }
 
@@ -76,7 +95,7 @@ app.set('trust proxy', 3);
 app.use(helmet());
 app.use(
   cors({
-    origin: process.env.CLIENT_ORIGIN || 'http://localhost:3000',
+    origin: corsAllowedOrigins,
     credentials: true,
   })
 );
