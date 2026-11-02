@@ -24,9 +24,10 @@ export interface AppointmentConfirmationInput {
   customerEmail: string | null;
   serviceName: string | null;
   startTime: string; // ISO
+  timezone?: string;
 }
 
-function formatWhen(startTime: string): string {
+function formatWhen(startTime: string, timezone?: string): string {
   return new Date(startTime).toLocaleString([], {
     weekday: 'short',
     year: 'numeric',
@@ -34,6 +35,7 @@ function formatWhen(startTime: string): string {
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    ...(timezone ? { timeZone: timezone } : {}),
   });
 }
 
@@ -106,11 +108,32 @@ async function sendEmail(to: string, subject: string, body: string): Promise<boo
   }
 }
 
+export async function sendWidgetLeadNotification(input: {
+  to: string;
+  businessName: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  message: string;
+}) {
+  const body = [
+    `A new website chat enquiry was submitted for ${input.businessName}.`,
+    '',
+    `Name: ${input.name}`,
+    `Email: ${input.email ?? 'Not provided'}`,
+    `Phone: ${input.phone ?? 'Not provided'}`,
+    '',
+    'Message:',
+    input.message,
+  ].join('\n');
+  return sendEmail(input.to, `New website enquiry for ${input.businessName}`, body);
+}
+
 // Sends SMS + email (whichever channels are configured/available) for a newly
 // booked appointment, and logs each attempt to the messages table. Never throws -
 // a notification failure should never roll back or fail the booking itself.
 export async function sendAppointmentConfirmation(input: AppointmentConfirmationInput) {
-  const when = formatWhen(input.startTime);
+  const when = formatWhen(input.startTime, input.timezone);
   const service = input.serviceName ? ` for ${input.serviceName}` : '';
   const smsBody = `${input.businessName}: Your appointment${service} is confirmed for ${when}. Reply if you need to reschedule.`;
   const emailBody = `Hi ${input.customerName},\n\nYour appointment${service} with ${input.businessName} is confirmed for ${when}.\n\nSee you then!`;
@@ -154,12 +177,13 @@ export interface AppointmentCancellationInput {
   customerEmail: string | null;
   serviceName: string | null;
   startTime: string; // ISO
+  timezone?: string;
 }
 
 // Mirrors sendAppointmentConfirmation: best-effort, logs every attempt, never throws -
 // a notification failure should never roll back or fail the cancellation itself.
 export async function sendAppointmentCancellation(input: AppointmentCancellationInput) {
-  const when = formatWhen(input.startTime);
+  const when = formatWhen(input.startTime, input.timezone);
   const service = input.serviceName ? ` for ${input.serviceName}` : '';
   const smsBody = `${input.businessName}: Your appointment${service} on ${when} has been cancelled. Call us if you'd like to rebook.`;
   const emailBody = `Hi ${input.customerName},\n\nYour appointment${service} with ${input.businessName} on ${when} has been cancelled.\n\nGive us a call if you'd like to rebook.`;

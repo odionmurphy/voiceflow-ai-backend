@@ -16,6 +16,7 @@ import calendarRoutes from './routes/calendar';
 import messageRoutes from './routes/messages';
 import paymentRoutes from './routes/payments';
 import stripeWebhookRoutes from './routes/webhook';
+import widgetRoutes from './routes/widget';
 import { startReminderScheduler } from './jobs/reminders';
 import { pool } from './config/db';
 
@@ -93,18 +94,19 @@ const PORT = process.env.PORT || 4000;
 app.set('trust proxy', 3);
 
 app.use(helmet());
-app.use(
-  cors({
-    origin: corsAllowedOrigins,
-    credentials: true,
-  })
-);
 
 // Stripe webhook needs the raw request body for signature verification, so it must be
 // mounted before the global express.json() parser consumes the stream.
 app.use('/api/payments/webhook', express.raw({ type: 'application/json' }), stripeWebhookRoutes);
 
 app.use(express.json({ limit: '1mb' }));
+app.use('/api/widget', widgetRoutes);
+app.use(
+  cors({
+    origin: corsAllowedOrigins,
+    credentials: true,
+  })
+);
 
 app.get('/health', async (_req, res) => {
   try {

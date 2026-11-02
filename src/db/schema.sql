@@ -194,6 +194,49 @@ CREATE TABLE messages (
 CREATE INDEX idx_messages_business ON messages(business_id, created_at);
 
 -- =========================
+-- WEBSITE WIDGET LEADS
+-- =========================
+CREATE TABLE widget_leads (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id     UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    name            VARCHAR(120) NOT NULL,
+    email           VARCHAR(254),
+    phone           VARCHAR(32),
+    message         TEXT NOT NULL,
+    consent_at      TIMESTAMPTZ NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_widget_leads_business_created
+    ON widget_leads(business_id, created_at DESC);
+
+CREATE TABLE widget_booking_consents (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id         UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    customer_id         UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    appointment_id      UUID NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
+    consent_version     VARCHAR(40) NOT NULL,
+    website_origin      TEXT NOT NULL,
+    accepted_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_widget_booking_consents_appointment
+    ON widget_booking_consents(appointment_id);
+
+-- =========================
+-- WEBSITE WIDGET RATE LIMITS (short-lived, hashed visitor identifiers)
+-- =========================
+CREATE TABLE widget_rate_limits (
+    business_id     UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    ip_hash         CHAR(64) NOT NULL,
+    window_start    TIMESTAMPTZ NOT NULL,
+    request_count   INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (business_id, ip_hash, window_start)
+);
+
+CREATE INDEX idx_widget_rate_limits_window ON widget_rate_limits(window_start);
+
+-- =========================
 -- SUBSCRIPTIONS (billing state, Stripe-style)
 -- =========================
 CREATE TABLE subscriptions (

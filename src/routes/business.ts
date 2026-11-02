@@ -7,6 +7,19 @@ import { getBusinessAccess, withRole } from '../middleware/ownership';
 const router = Router();
 router.use(requireAuth);
 
+const websiteOriginSchema = z.string().url().refine((origin) => {
+  try {
+    const parsed = new URL(origin);
+    return (
+      parsed.origin === origin &&
+      (parsed.protocol === 'https:' ||
+        (parsed.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(parsed.hostname)))
+    );
+  } catch {
+    return false;
+  }
+}, 'Use an HTTPS website origin without a path, e.g. https://example.com');
+
 const businessSchema = z.object({
   name: z.string().min(1),
   industry: z.string().optional(),
@@ -25,14 +38,15 @@ const aiSettingsSchema = z.object({
   faq: z.array(z.object({ question: z.string(), answer: z.string() })).optional(),
   bookingRules: z
     .object({
-      minNoticeHours: z.number().optional(),
-      bufferMinutes: z.number().optional(),
-      maxPerDay: z.number().optional(),
+      minNoticeHours: z.number().nonnegative().optional(),
+      bufferMinutes: z.number().nonnegative().optional(),
+      maxPerDay: z.number().int().nonnegative().optional(),
       assistantName: z.string().optional(),
       forwardingNumber: z.string().optional(),
       notifyEmail: z.string().email().optional().or(z.literal("")),
       privacyPolicyUrl: z.string().optional(),
       language: z.string().optional(),
+      websiteDomains: z.array(websiteOriginSchema).max(10).optional(),
     })
     .optional(),
 });
@@ -153,6 +167,21 @@ router.get('/:id/ai-settings', async (req, res) => {
 
   const result = await query('SELECT * FROM ai_settings WHERE business_id = $1', [req.params.id]);
   res.json({ aiSettings: result.rows[0] });
+});
+
+router.get('/:id/widget/leads', async (req, res) => {
+  const access = await getBusinessAccess(req.params.id, req.user!.userId);
+  if (!access) return res.status(404).json({ error: 'Business not found' });
+
+  const result = await query(
+    `SELECT id, name, email, phone, message, created_at
+     FROM widget_leads
+     WHERE business_id = $1
+     ORDER BY created_at DESC
+     LIMIT 100`,
+    [req.params.id]
+  );
+  res.json({ leads: result.rows });
 });
 
 // PATCH /api/business/:id/ai-settings - owner-only

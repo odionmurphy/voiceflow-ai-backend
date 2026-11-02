@@ -80,6 +80,13 @@ a production `CLIENT_ORIGIN`, any additional exact browser origins in
 canonical URL used for billing and OAuth redirects. The production process refuses to
 start when required settings or invalid CORS origins are present.
 
+For the website chat widget, add each customer's exact HTTPS website origin under
+AI Settings → Website chat widget. Before deploying the widget API, run
+`npm run migrate:website-widget` once against the intended database. The migration
+creates short-lived rate-limit counters, enquiry records, and appointment-consent
+records. The widget is available only to businesses with an active or trialing
+subscription and only from domains on that business's allowlist.
+
 ## API quick reference
 
 All routes except `/health`, `/api/auth/register`, `/api/auth/login` require:
