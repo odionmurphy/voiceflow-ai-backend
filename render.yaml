@@ -19,7 +19,7 @@ services:
       - key: CLIENT_ORIGIN
         value: https://voiceflow-ai-web.vercel.app
       - key: CORS_ALLOWED_ORIGINS
-        value: https://voiceflow-ai-web-odionusunobuns-projects.vercel.app
+        value: https://voiceflow-ai-web-odionusunobuns-projects.vercel.app,https://voiceflow-ai-web-git-main-odionusunobuns-projects.vercel.app
       - key: GOOGLE_CALENDAR_CLIENT_ID
         sync: false
       - key: GOOGLE_CALENDAR_CLIENT_SECRET

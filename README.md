@@ -99,7 +99,7 @@ All routes except `/health`, `/api/auth/register`, `/api/auth/login` require:
 | GET | `/api/auth/me` | Current user |
 | GET/POST | `/api/business` | List / create businesses |
 | GET/PATCH | `/api/business/:id` | Business profile |
-| GET/PATCH | `/api/business/:id/ai-settings` | Greeting, services, FAQ, booking rules |
+| GET/PATCH | `/api/business/:id/ai-settings` | Greeting, voice, services, FAQ, booking rules |
 | GET/POST | `/api/customers?businessId=` | List / upsert customers |
 | GET/PATCH/DELETE | `/api/customers/:id` | Single customer |
 | GET | `/api/appointments?businessId=&from=&to=` | List appointments in range |
