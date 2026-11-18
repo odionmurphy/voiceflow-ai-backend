@@ -13,7 +13,7 @@ export const PLAN_PRICE_IDS: Record<string, string> = {
 export const PLAN_LIMITS: Record<string, number> = {
   starter: 100,
   professional: 500,
-  business: 2_147_483_647,
+  business: 1_000,
 };
 
 export function isStripeConfigured() {

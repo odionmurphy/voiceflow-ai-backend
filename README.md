@@ -70,6 +70,10 @@ variables in `backend/.env`. Each price variable must be a recurring Stripe Pric
 (`price_...`) from the same Stripe account and test/live mode as the secret key. If
 Stripe rejects a change, the backend logs the Stripe error code and request ID; the
 API error includes those references for diagnosis.
+Configure Starter as €49/month and Professional as €99/month. Configure Business as
+a recurring monthly price for manual provisioning after agreeing on a quote. The app
+includes 100, 500, and 1,000 answered calls per month respectively; Business quotes
+must not promise a higher call allowance unless the quota implementation is updated.
 
 Before deploying the inbound call quota enforcement, run
 `npm run migrate:call-admission` once against the production database, then deploy
@@ -79,6 +83,8 @@ a production `CLIENT_ORIGIN`, any additional exact browser origins in
 (at least 32 characters) in the backend environment. `CLIENT_ORIGIN` remains the
 canonical URL used for billing and OAuth redirects. The production process refuses to
 start when required settings or invalid CORS origins are present.
+Before deploying the new Business call cap, run `npm run migrate:business-call-cap`
+once against the production database so existing Business subscriptions are capped too.
 
 For the website chat widget, add each customer's exact HTTPS website origin under
 AI Settings → Website chat widget. Before deploying the widget API, run

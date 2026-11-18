@@ -75,6 +75,9 @@ router.post('/:businessId/checkout-session', async (req, res) => {
   if (!plan || !Object.prototype.hasOwnProperty.call(PLAN_LIMITS, plan)) {
     return res.status(400).json({ error: 'plan must be one of starter, professional, business' });
   }
+  if (plan === 'business') {
+    return res.status(400).json({ error: 'Business pricing is arranged with our team. Please request a quote.' });
+  }
 
   const subResult = await query('SELECT * FROM subscriptions WHERE business_id = $1', [
     req.params.businessId,
@@ -138,6 +141,9 @@ router.post('/:businessId/change-plan', async (req, res) => {
   const plan = req.body.plan as string;
   if (!plan || !Object.prototype.hasOwnProperty.call(PLAN_LIMITS, plan)) {
     return res.status(400).json({ error: 'plan must be one of starter, professional, business' });
+  }
+  if (plan === 'business') {
+    return res.status(400).json({ error: 'Business pricing is arranged with our team. Please request a quote.' });
   }
   if (!PLAN_PRICE_IDS[plan]) {
     return res.status(500).json({ error: `No Stripe price configured for plan "${plan}"` });
